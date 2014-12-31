@@ -68,7 +68,7 @@ func (self MysqlModeToSql) _set() (sql string, val []interface{}) {
 	val = make([]interface{}, len(self.Params.set))
 	for i, v := range self.Params.set {
 		set[i] = self.Params._w(v.name)
-		val[i] = v
+		val[i] = v.val
 	}
 	sql = " SET " + strings.Join(set, ",")
 	return
@@ -122,7 +122,8 @@ func (self MysqlModeToSql) Select() (sql string, val []interface{}) {
 	}
 
 	if self.Params.limit != NULL_LIMIT {
-		sql = sql + fmt.Sprintf(" LIMIT %d , %d", self.limit[0], self.limit[1])
+
+		sql = sql + fmt.Sprintf(" LIMIT %d , %d", (self.limit[0]-1)*self.limit[1], self.limit[1])
 	}
 
 	return

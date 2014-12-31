@@ -107,9 +107,7 @@ func (self Params) All() (rows *sql.Rows, err error) {
 	} else {
 
 		sql, val := driversql[db.DriverName](self).Select()
-		fmt.Println(sql)
 		rows, err = db.Query(sql, val...)
-
 	}
 
 	return
@@ -172,11 +170,13 @@ func (self Params) Save() (bool, int64, error) {
 	var err error
 	var stmt *sql.Stmt
 	var res sql.Result
-	if c, _ := self.Count(); c > 0 {
+	if len(self.where) > 0 {
 		sql, val := driversql[db.DriverName](self).Update()
 		stmt, err = db.Prepare(sql)
 		if err == nil {
 			defer stmt.Close()
+		} else {
+			panic(err)
 		}
 		res, err = stmt.Exec(val...)
 

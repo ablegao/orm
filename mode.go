@@ -97,10 +97,10 @@ func (self *Object) Orderby(names ...string) *Object {
 	self.params.order = names
 	return self
 }
-func (self *Object) Limit(s, steq int) *Object {
+func (self *Object) Limit(page, steq int) *Object {
 	self.Lock()
 	defer self.Unlock()
-	self.params.limit = [2]int{s, steq}
+	self.params.limit = [2]int{page, steq}
 	return self
 }
 
@@ -148,28 +148,32 @@ func (self *Object) Delete() (int64, error) {
 func (self *Object) Save() (bool, int64, error) {
 	self.Lock()
 	defer self.Unlock()
-	valus := reflect.ValueOf(self.mode).Elem()
-	for i := 0; i < valus.NumField(); i++ {
-		typ := valus.Type().Field(i)
-		val := valus.Field(i)
-		if typ.Tag.Get("auto") == "true" {
-			switch val.Kind() {
-			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				if val.Int() > 0 {
-					self.params.Filter(typ.Tag.Get("field"), val.Int())
-					self.params.SetChange(typ.Tag.Get("field"), val.Interface())
-				}
-			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-				if val.Uint() > 0 {
-					self.params.Filter(typ.Tag.Get("field"), val.Uint())
+	if len(self.params.set) == 0 {
+		valus := reflect.ValueOf(self.mode).Elem()
+		for i := 0; i < valus.NumField(); i++ {
+
+			typ := valus.Type().Field(i)
+			val := valus.Field(i)
+			if len(typ.Tag.Get("field")) > 0 {
+				if typ.Tag.Get("auto") == "true" {
+					switch val.Kind() {
+					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+						if val.Int() > 0 {
+							self.params.Filter(typ.Tag.Get("field"), val.Int())
+							//self.params.SetChange(typ.Tag.Get("field"), val.Interface())
+						}
+					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+						if val.Uint() > 0 {
+							self.params.Filter(typ.Tag.Get("field"), val.Uint())
+							//self.params.SetChange(typ.Tag.Get("field"), val.Interface())
+						}
+					}
+				} else {
 					self.params.SetChange(typ.Tag.Get("field"), val.Interface())
 				}
 			}
-		} else {
-			self.params.SetChange(typ.Tag.Get("field"), val.Interface())
 		}
 	}
-
 	isNew, id, err := self.params.Save()
 	return isNew, id, err
 }
