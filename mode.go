@@ -91,6 +91,11 @@ func (self *Object) Limit(s, steq int) *Object {
 	return self
 }
 
+func (self *Object) Db(name string) *Object {
+	self.params.Db(name)
+	return self
+}
+
 func (self *Object) Count() (int64, error) {
 	self.RLock()
 	defer self.RUnlock()

@@ -11,22 +11,22 @@ var databases = map[string]*Database{}
 
 type Database struct {
 	*sql.DB
-	name           string
-	driverName     string
-	dataSourceName string
+	Name           string
+	DriverName     string
+	DataSourceName string
 }
 
 func (self *Database) Conn() (err error) {
-	self.DB, err = sql.Open(self.driverName, self.dataSourceName)
+	self.DB, err = sql.Open(self.DriverName, self.DataSourceName)
 	return
 }
 
 func NewDatabase(name, driverName, dataSourceName string) (database *Database, err error) {
 	if database, ok := databases[name]; !ok {
 		database = new(Database)
-		database.name = name
-		database.driverName = driverName
-		database.dataSourceName = dataSourceName
+		database.Name = name
+		database.DriverName = driverName
+		database.DataSourceName = dataSourceName
 		databases[name] = database
 		err = database.Conn()
 	} else {
@@ -45,7 +45,6 @@ type ParmaField struct {
 **/
 type Params struct {
 	connname  string
-	stmt      *sql.Stmt
 	tbname    string
 	where     []ParmaField
 	or        []ParmaField
@@ -101,39 +100,47 @@ func (self Params) All() (rows *sql.Rows, err error) {
 		return
 	} else {
 
-		sql, val := driversql[self.connname](self).Select()
+		sql, val := driversql[db.DriverName](self).Select()
 		rows, err = db.Query(sql, val...)
+
 	}
 
 	return
 }
-
+func (self *Params) Db(name string) *Params {
+	self.connname = name
+	return self
+}
 func (self Params) One() (row *sql.Row) {
 	//rows, err = self.db.Query(self.execSelect())
 	//	self.stmt, err = self.db.Prepare()
 	if db, ok := databases[self.connname]; ok {
 
-		sql, val := driversql[self.connname](self).Select()
+		sql, val := driversql[db.DriverName](self).Select()
 		row = db.QueryRow(sql, val...)
 	}
 	return
 }
 func (self Params) Delete() (res sql.Result, err error) {
-
+	var stmt *sql.Stmt
 	if db, ok := databases[self.connname]; ok {
 
-		sql, val := driversql[self.connname](self).Delete()
-		self.stmt, err = db.Prepare(sql)
-		res, err = self.stmt.Exec(val...)
+		sql, val := driversql[db.DriverName](self).Delete()
+		stmt, err = db.Prepare(sql)
+		if err == nil {
+			defer stmt.Close()
+		}
+		res, err = stmt.Exec(val...)
 
 	} else {
 		panic("Database " + self.connname + " not defined.")
 	}
 	return
 }
+
 func (self Params) Count() (int64, error) {
 	if db, ok := databases[self.connname]; ok {
-		sql, val := driversql[self.connname](self).Count()
+		sql, val := driversql[db.DriverName](self).Count()
 		row := db.QueryRow(sql, val...)
 
 		var c int64
@@ -150,14 +157,21 @@ func (self Params) Count() (int64, error) {
 }
 
 func (self Params) Save() (bool, int64, error) {
+
 	db, ok := databases[self.connname]
 	if !ok {
 		panic("Database " + self.connname + " not defined.")
 	}
+	var err error
+	var stmt *sql.Stmt
+	var res sql.Result
 	if c, _ := self.Count(); c > 0 {
-		sql, val := driversql[self.connname](self).Update()
-		self.stmt, _ = db.Prepare(sql)
-		res, err := self.stmt.Exec(val...)
+		sql, val := driversql[db.DriverName](self).Update()
+		stmt, err = db.Prepare(sql)
+		if err == nil {
+			defer stmt.Close()
+		}
+		res, err = stmt.Exec(val...)
 
 		if err != nil {
 			return false, 0, err
@@ -165,9 +179,12 @@ func (self Params) Save() (bool, int64, error) {
 		a, b := res.RowsAffected()
 		return false, a, b
 	} else {
-		sql, val := driversql[self.connname](self).Insert()
-		self.stmt, _ = db.Prepare(sql)
-		res, err := self.stmt.Exec(val...)
+		sql, val := driversql[db.DriverName](self).Insert()
+		stmt, err = db.Prepare(sql)
+		if err == nil {
+			defer stmt.Close()
+		}
+		res, err = stmt.Exec(val...)
 		if err != nil {
 			return true, 0, err
 		}
