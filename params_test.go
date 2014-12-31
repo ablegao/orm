@@ -9,9 +9,9 @@ func Test_execSelect(t *testing.T) {
 
 	params.Filter("field__gt", 1)
 	params.Filter("bbb__lt", 2)
-	params.SetChange("a", 1)
-	params.SetChange("b__sub", 1)
-	params.SetChange("c__div", 1)
+	params.Change("a", 1)
+	params.Change("b__sub", 1)
+	params.Change("c__div", 1)
 	//t.Log(params.execSelect())
 	str, _ := driversql["mysql"](params).Select()
 	t.Log(str)

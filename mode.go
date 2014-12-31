@@ -1,7 +1,3 @@
-// Copyright 2014 The 开心易点 All rights reserved.
-// 非开源，公司内部程序， 不可转送带走，不可未经公司允许发布到公网、个人网盘、电子邮箱。不可做非公司电脑或非公司存储设备的备份。
-// 不可对外泄露程序内部逻辑，程序结构，不可泄露程序数据结构以及相关加密算法。
-
 // model解析支持
 
 package orm
@@ -18,9 +14,7 @@ type Module interface {
 }
 
 func Objects(mode Module) Object {
-	param := new(Params)
-	param.SetTable(mode.GetTableName())
-	param.init()
+
 	typ := reflect.TypeOf(mode).Elem()
 	vals := []string{}
 	for i := 0; i < typ.NumField(); i++ {
@@ -28,25 +22,27 @@ func Objects(mode Module) Object {
 			vals = append(vals, field)
 		}
 	}
-	param.SetField(vals...)
+
 	obj := Object{}
+	obj.SetTable(mode.GetTableName())
 	obj.mode = mode
-	obj.params = param
+	obj.Params.Init()
+	obj.Params.SetField(vals...)
 	return obj
 }
 
 type Object struct {
 	sync.RWMutex
-	mode   Module
-	params *Params
+	Params
+	mode Module
 }
 
 func (self *Object) Objects(mode Module) *Object {
 	self.Lock()
 	defer self.Unlock()
-	param := new(Params)
-	param.SetTable(mode.GetTableName())
-	param.init()
+	self.SetTable(mode.GetTableName())
+	self.Init()
+
 	typ := reflect.TypeOf(mode).Elem()
 	vals := []string{}
 	for i := 0; i < typ.NumField(); i++ {
@@ -54,27 +50,62 @@ func (self *Object) Objects(mode Module) *Object {
 			vals = append(vals, field)
 		}
 	}
-	param.SetField(vals...)
+	self.SetField(vals...)
 	self.mode = mode
-	self.params = param
 	return self
 }
 
+//修改数据
+// name 结构字段名称
+// val 结构数据
+func (self *Object) Change(name string, val interface{}) *Object {
+	self.Lock()
+	defer self.Unlock()
+	typ := reflect.TypeOf(self.mode).Elem()
+	fieldName := strings.Split(name, "__")
+	if field, ok := typ.FieldByName(fieldName[0]); ok && len(field.Tag.Get("field")) > 0 {
+		name := field.Tag.Get("field")
+		if len(fieldName) > 1 {
+			name = name + "__" + fieldName[1]
+		}
+		self.Params.Change(name, val)
+	}
+	return self
+}
+
+//条件筛选
+// name 结构字段名称
+// val 需要过滤的数据值
 func (self *Object) Filter(name string, val interface{}) *Object {
 	self.Lock()
 	defer self.Unlock()
 	typ := reflect.TypeOf(self.mode).Elem()
 	fieldName := strings.Split(name, "__")
-	if field, ok := typ.FieldByName(fieldName[0]); ok {
+	if field, ok := typ.FieldByName(fieldName[0]); ok && len(field.Tag.Get("field")) > 0 {
 		name := field.Tag.Get("field")
 		if len(fieldName) > 1 {
 			name = name + "__" + fieldName[1]
 		}
-		self.params.Filter(name, val)
+		self.Params.Filter(name, val)
+	}
+	return self
+}
+func (self *Object) FilterOr(name string, val interface{}) *Object {
+	self.Lock()
+	defer self.Unlock()
+	typ := reflect.TypeOf(self.mode).Elem()
+	fieldName := strings.Split(name, "__")
+	if field, ok := typ.FieldByName(fieldName[0]); ok && len(field.Tag.Get("field")) > 0 {
+		name := field.Tag.Get("field")
+		if len(fieldName) > 1 {
+			name = name + "__" + fieldName[1]
+		}
+		self.Params.FilterOr(name, val)
 	}
 	return self
 }
 
+// Filter 的一次传入版本 ， 不建议使用 , 因为map 循序不可控
 func (self *Object) Filters(filters map[string]interface{}) *Object {
 	self.Lock()
 	defer self.Unlock()
@@ -83,37 +114,46 @@ func (self *Object) Filters(filters map[string]interface{}) *Object {
 	}
 	return self
 }
+
+// Order by 排序 ，
+// Field__asc Field__desc
 func (self *Object) Orderby(names ...string) *Object {
 	typ := reflect.TypeOf(self.mode).Elem()
 	for i, name := range names {
 		fieldName := strings.Split(name, "__")
-		if field, ok := typ.FieldByName(fieldName[0]); ok {
+		if field, ok := typ.FieldByName(fieldName[0]); ok && len(field.Tag.Get("field")) > 0 {
 			if name = field.Tag.Get("field"); len(name) > 0 {
 				name = name + "__" + fieldName[1]
 				names[i] = name
 			}
 		}
 	}
-	self.params.order = names
+	self.Params.order = names
 	return self
 }
+
+// 分页支持
 func (self *Object) Limit(page, steq int) *Object {
 	self.Lock()
 	defer self.Unlock()
-	self.params.limit = [2]int{page, steq}
+	self.Params.limit = [2]int{page, steq}
 	return self
 }
 
+//选择数据库
 func (self *Object) Db(name string) *Object {
-	self.params.Db(name)
+	self.Params.Db(name)
 	return self
 }
 
+// 计算数量
 func (self *Object) Count() (int64, error) {
 	self.RLock()
 	defer self.RUnlock()
-	return self.params.Count()
+	return self.Params.Count()
 }
+
+//删除数据
 func (self *Object) Delete() (int64, error) {
 	self.Lock()
 	defer self.Unlock()
@@ -125,17 +165,17 @@ func (self *Object) Delete() (int64, error) {
 			switch val.Kind() {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				if val.Int() > 0 {
-					self.params.Filter(typ.Name, val.Int())
+					self.Params.Filter(typ.Name, val.Int())
 				}
 			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 				if val.Uint() > 0 {
-					self.params.Filter(typ.Name, val.Uint())
+					self.Params.Filter(typ.Name, val.Uint())
 				}
 			}
 		}
 	}
-	if len(self.params.where) > 0 {
-		res, err := self.params.Delete()
+	if len(self.Params.where) > 0 {
+		res, err := self.Params.Delete()
 		if err != nil {
 			return 0, err
 		}
@@ -145,43 +185,49 @@ func (self *Object) Delete() (int64, error) {
 	}
 
 }
+
+//更新活添加
 func (self *Object) Save() (bool, int64, error) {
 	self.Lock()
 	defer self.Unlock()
-	if len(self.params.set) == 0 {
-		valus := reflect.ValueOf(self.mode).Elem()
+	valus := reflect.ValueOf(self.mode).Elem()
+	if len(self.Params.set) == 0 {
 		for i := 0; i < valus.NumField(); i++ {
-
 			typ := valus.Type().Field(i)
 			val := valus.Field(i)
-			if len(typ.Tag.Get("field")) > 0 {
-				if typ.Tag.Get("auto") == "true" {
-					switch val.Kind() {
-					case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-						if val.Int() > 0 {
-							self.params.Filter(typ.Tag.Get("field"), val.Int())
-							//self.params.SetChange(typ.Tag.Get("field"), val.Interface())
-						}
-					case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-						if val.Uint() > 0 {
-							self.params.Filter(typ.Tag.Get("field"), val.Uint())
-							//self.params.SetChange(typ.Tag.Get("field"), val.Interface())
-						}
+			if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("auto") != "true" {
+				self.Params.Change(typ.Tag.Get("field"), val.Interface())
+			}
+		}
+	}
+	if len(self.Params.where) == 0 {
+		for i := 0; i < valus.NumField(); i++ {
+			typ := valus.Type().Field(i)
+			val := valus.Field(i)
+			if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("auto") == "true" {
+				switch val.Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					if val.Int() > 0 {
+						self.Params.Filter(typ.Tag.Get("field"), val.Int())
 					}
-				} else {
-					self.params.SetChange(typ.Tag.Get("field"), val.Interface())
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					if val.Uint() > 0 {
+						self.Params.Filter(typ.Tag.Get("field"), val.Uint())
+					}
 				}
 			}
 		}
 	}
-	isNew, id, err := self.params.Save()
+
+	isNew, id, err := self.Params.Save()
 	return isNew, id, err
 }
 
+//查找数据
 func (self *Object) All() ([]interface{}, error) {
 	self.Lock()
 	defer self.Unlock()
-	if rows, err := self.params.All(); err == nil {
+	if rows, err := self.Params.All(); err == nil {
 		defer rows.Close()
 
 		ret := []interface{}{}
@@ -205,10 +251,11 @@ func (self *Object) All() ([]interface{}, error) {
 
 }
 
+//提取一个数据
 func (self *Object) One() error {
 	self.RLock()
 	defer self.RUnlock()
-	if row := self.params.One(); row != nil {
+	if row := self.Params.One(); row != nil {
 		valMode := reflect.ValueOf(self.mode).Elem()
 		typeMode := reflect.TypeOf(self.mode).Elem()
 		vals := []interface{}{}

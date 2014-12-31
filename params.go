@@ -18,6 +18,7 @@ type Database struct {
 
 func (self *Database) Conn() (err error) {
 	self.DB, err = sql.Open(self.DriverName, self.DataSourceName)
+
 	return
 }
 
@@ -65,7 +66,7 @@ func (self *Params) GetSetLen() int {
 	return len(self.set)
 }
 
-func (self *Params) init() {
+func (self *Params) Init() {
 	if len(self.connname) == 0 {
 		self.connname = "default"
 	}
@@ -90,7 +91,7 @@ func (self *Params) FilterOr(name string, val interface{}) *Params {
 }
 
 // 添加修改
-func (self *Params) SetChange(name string, val interface{}) {
+func (self *Params) Change(name string, val interface{}) {
 	self.set = append(self.set, ParmaField{name, val})
 }
 func (self *Params) Limit(page, step int) *Params {
@@ -98,7 +99,7 @@ func (self *Params) Limit(page, step int) *Params {
 	self.limit[1] = step
 	return self
 }
-func (self Params) All() (rows *sql.Rows, err error) {
+func (self *Params) All() (rows *sql.Rows, err error) {
 	//rows, err = self.db.Query(self.execSelect())
 	//	self.stmt, err = self.db.Prepare()
 	if db, ok := databases[self.connname]; !ok {
@@ -106,8 +107,11 @@ func (self Params) All() (rows *sql.Rows, err error) {
 		return
 	} else {
 
-		sql, val := driversql[db.DriverName](self).Select()
+		sql, val := driversql[db.DriverName](*self).Select()
 		rows, err = db.Query(sql, val...)
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	return
@@ -116,36 +120,38 @@ func (self *Params) Db(name string) *Params {
 	self.connname = name
 	return self
 }
-func (self Params) One() (row *sql.Row) {
+func (self *Params) One() (row *sql.Row) {
 	//rows, err = self.db.Query(self.execSelect())
 	//	self.stmt, err = self.db.Prepare()
 	if db, ok := databases[self.connname]; ok {
 
-		sql, val := driversql[db.DriverName](self).Select()
+		sql, val := driversql[db.DriverName](*self).Select()
 		row = db.QueryRow(sql, val...)
 	}
 	return
 }
-func (self Params) Delete() (res sql.Result, err error) {
+func (self *Params) Delete() (res sql.Result, err error) {
 	var stmt *sql.Stmt
 	if db, ok := databases[self.connname]; ok {
 
-		sql, val := driversql[db.DriverName](self).Delete()
+		sql, val := driversql[db.DriverName](*self).Delete()
 		stmt, err = db.Prepare(sql)
 		if err == nil {
 			defer stmt.Close()
 		}
 		res, err = stmt.Exec(val...)
-
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		panic("Database " + self.connname + " not defined.")
 	}
 	return
 }
 
-func (self Params) Count() (int64, error) {
+func (self *Params) Count() (int64, error) {
 	if db, ok := databases[self.connname]; ok {
-		sql, val := driversql[db.DriverName](self).Count()
+		sql, val := driversql[db.DriverName](*self).Count()
 		row := db.QueryRow(sql, val...)
 
 		var c int64
@@ -161,17 +167,17 @@ func (self Params) Count() (int64, error) {
 	return 0, nil
 }
 
-func (self Params) Save() (bool, int64, error) {
-
+func (self *Params) Save() (bool, int64, error) {
 	db, ok := databases[self.connname]
 	if !ok {
 		panic("Database " + self.connname + " not defined.")
 	}
+
 	var err error
 	var stmt *sql.Stmt
 	var res sql.Result
 	if len(self.where) > 0 {
-		sql, val := driversql[db.DriverName](self).Update()
+		sql, val := driversql[db.DriverName](*self).Update()
 		stmt, err = db.Prepare(sql)
 		if err == nil {
 			defer stmt.Close()
@@ -181,18 +187,22 @@ func (self Params) Save() (bool, int64, error) {
 		res, err = stmt.Exec(val...)
 
 		if err != nil {
+			panic(err)
 			return false, 0, err
 		}
 		a, b := res.RowsAffected()
 		return false, a, b
 	} else {
-		sql, val := driversql[db.DriverName](self).Insert()
+		sql, val := driversql[db.DriverName](*self).Insert()
 		stmt, err = db.Prepare(sql)
 		if err == nil {
 			defer stmt.Close()
+		} else {
+			panic(err)
 		}
 		res, err = stmt.Exec(val...)
 		if err != nil {
+			panic(err)
 			return true, 0, err
 		}
 		a, b := res.LastInsertId()
@@ -209,65 +219,4 @@ func (self *Params) GetTableName() string {
 		tbname = "`" + self.tbname + "`"
 	}
 	return tbname
-}
-
-/*where
-
-where 条件:
-__exact        精确等于 like 'aaa'
- __iexact    精确等于 忽略大小写 ilike 'aaa'
- __contains    包含 like '%aaa%'
- __icontains    包含 忽略大小写 ilike '%aaa%'，但是对于sqlite来说，contains的作用效果等同于icontains。
-__gt    大于
-__gte    大于等于
-__ne    不等于
-__lt    小于
-__lte    小于等于
-__in     存在于一个list范围内
-__startswith   以...开头
-__istartswith   以...开头 忽略大小写
-__endswith     以...结尾
-__iendswith    以...结尾，忽略大小写
-__range    在...范围内
-__year       日期字段的年份
-__month    日期字段的月份
-__day        日期字段的日
-__isnull=True/False
-
-
-**/
-func (self Params) _w(a string) string {
-	typ := ""
-	if bb := strings.Split(a, "__"); len(bb) > 1 {
-		a = bb[0]
-		typ = bb[1]
-	}
-	patten := ""
-	switch typ {
-	case "gt":
-		patten = "`%s`>?"
-	case "gte":
-		patten = "`%s`>=?"
-	case "lt":
-		patten = "`%s`<?"
-	case "lte":
-		patten = "`%s`<=?"
-	case "ne":
-		patten = "`%s`<>?"
-	case "add":
-		return fmt.Sprintf("`%s`=`%s`+?", a, a)
-	case "sub":
-		return fmt.Sprintf("`%s`=`%s`-?", a, a)
-	case "mult":
-		return fmt.Sprintf("`%s`=`%s`*?", a, a)
-	case "div":
-		return fmt.Sprintf("`%s`=`%s`/?", a, a)
-	case "asc":
-		patten = "`%s` ASC"
-	case "desc":
-		patten = "`%s` DESC"
-	default:
-		patten = "`%s`=?"
-	}
-	return fmt.Sprintf(patten, a)
 }

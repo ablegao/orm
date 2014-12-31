@@ -1,13 +1,8 @@
-// Copyright 2014 The 开心易点 All rights reserved.
-// 非开源，公司内部程序， 不可转送带走，不可未经公司允许发布到公网、个人网盘、电子邮箱。不可做非公司电脑或非公司存储设备的备份。
-// 不可对外泄露程序内部逻辑，程序结构，不可泄露程序数据结构以及相关加密算法。
-
 //Cache，用来沟通第一层cache 和同步数据到数据库
 
 package orm
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 )
@@ -33,39 +28,28 @@ type Cache interface {
 	GetConnect()
 }
 
-func CacheMode(mode Module) (cache *CacheObj) {
-	obj := Objects(mode)
-	obj.One()
+func CacheMode(mode Module) (cache *CacheModule) {
 	cache.mode = mode
-
 	cache.Objects(mode)
 	cache.cachekey = cache.GetCacheKey()
-
-	if has, err := cache.Cache.Exists(cache.cachekey); err == nil {
-		if has {
-
-		} else {
-
-		}
-	}
 
 	return
 }
 
-type CacheObj struct {
+type CacheModule struct {
 	Cache
-	*Object
+	Object
 	cachekey string
 }
 
-func (self *CacheObj) Objects(mode Module) *CacheObj {
-	self.Object = new(Object)
-	self.Object.Objects(mode)
+func (self *CacheModule) Objects(mode Module) *CacheModule {
 
+	self.Object.Objects(mode)
+	self.cachekey = self.GetCacheKey()
 	return self
 }
 
-func (self *CacheObj) GetCacheKey() string {
+func (self *CacheModule) GetCacheKey() string {
 
 	value := reflect.ValueOf(self.mode).Elem()
 	typeOf := reflect.TypeOf(self.mode).Elem()
@@ -75,7 +59,10 @@ func (self *CacheObj) GetCacheKey() string {
 		field := typeOf.Field(i)
 		if name := field.Tag.Get("cache"); len(name) > 0 {
 			val := value.Field(i)
-			str = append(str, []byte(name+":")...)
+			if prefix := field.Tag.Get("cache_prefix"); len(prefix) > 0 {
+				str = append(str, []byte(prefix+":")...)
+			}
+			str = append(str, []byte(":")...)
 			switch field.Type.Kind() {
 			case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
 				if val.Uint() <= 0 {
@@ -103,28 +90,30 @@ func (self *CacheObj) GetCacheKey() string {
 					str = append(str, []byte("false")...)
 				}
 			}
+			str = append(str, []byte(":"+name)...)
 		}
 	}
 	return string(str)
 }
 
-func (self *CacheObj) Incrby(key string, val int64) (ret int64, err error) {
+func (self CacheModule) Incrby(key string, val int64) (ret int64, err error) {
 	ret, err = self.Cache.Hincrby(self.cachekey, key, val)
 	if val > 0 {
-		str := fmt.Sprintf("+%d", val)
-		self.Object.params.SetChange(key, str)
+		self.Object.Change(key+"_add", val)
 	} else if val < 0 {
-		self.Object.params.SetChange(key, val)
+		self.Object.Change(key+"_sub", val)
 	}
+	go self.Object.Save()
 	return
 }
 
-func (self *CacheObj) Incry(key string) (val int64, err error) {
+func (self CacheModule) Incry(key string) (val int64, err error) {
 	val, err = self.Incrby(key, 1)
+
 	return
 }
 
-func (self *CacheObj) Set(key string, val interface{}) (err error) {
+func (self CacheModule) Set(key string, val interface{}) (err error) {
 	b := []byte{}
 	switch val.(type) {
 	case uint32, uint64, uint16, uint8:
@@ -137,12 +126,49 @@ func (self *CacheObj) Set(key string, val interface{}) (err error) {
 		b = strconv.AppendBool(b, val.(bool))
 	}
 	_, err = self.Cache.Hset(self.cachekey, key, b)
+	if err != nil {
+		return
+	}
 
-	self.Object.params.SetChange(key, val)
+	go self.Object.Change(key, val).Save()
+
 	return
 }
 
-func (self *CacheObj) Save() (err error) {
+func (self *CacheModule) Filter(name string, val interface{}) *CacheModule {
+
+	return self
+}
+
+func (self *CacheModule) Filters(filters map[string]interface{}) *CacheModule {
+	return self
+}
+
+func (self *CacheModule) Change(name string, val interface{}) *CacheModule {
+	return self
+}
+
+func (self *CacheModule) Orderby(name ...string) *CacheModule {
+	return self
+}
+
+func (self *CacheModule) Limit(page, step int) *CacheModule {
+	return self
+}
+func (self *CacheModule) Count() (int64, error) {
+	return 0, nil
+}
+func (self *CacheModule) Delete() (int64, error) {
+	return 0, nil
+}
+func (self *CacheModule) Save() (isnew bool, id int64, err error) {
 	go self.Object.Save()
 	return
+}
+func (self *CacheModule) All() ([]interface{}, error) {
+	return nil, nil
+}
+
+func (self *CacheModule) One() error {
+	return nil
 }

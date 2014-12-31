@@ -3,7 +3,7 @@ package orm
 import "testing"
 
 type userB struct {
-	CacheObj
+	CacheModule
 	Id        int64  `field:"id" index:"pk" auto:"true" cache:"user" `
 	Udid      string `field:"udid" index:"index" cache:"udid"`
 	Username  string `field:"username"`
