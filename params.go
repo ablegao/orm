@@ -80,18 +80,24 @@ func (self *Params) SetField(fields ...string) {
 	self.fields = fields
 }
 
-func (self *Params) Filter(name string, val interface{}) {
+func (self *Params) Filter(name string, val interface{}) *Params {
 	self.where = append(self.where, ParmaField{name, val})
+	return self
 }
-func (self *Params) FilterOr(name string, val interface{}) {
+func (self *Params) FilterOr(name string, val interface{}) *Params {
 	self.or = append(self.or, ParmaField{name, val})
+	return self
 }
 
 // 添加修改
 func (self *Params) SetChange(name string, val interface{}) {
 	self.set = append(self.set, ParmaField{name, val})
 }
-
+func (self *Params) Limit(page, step int) *Params {
+	self.limit[0] = page
+	self.limit[1] = step
+	return self
+}
 func (self Params) All() (rows *sql.Rows, err error) {
 	//rows, err = self.db.Query(self.execSelect())
 	//	self.stmt, err = self.db.Prepare()
@@ -101,6 +107,7 @@ func (self Params) All() (rows *sql.Rows, err error) {
 	} else {
 
 		sql, val := driversql[db.DriverName](self).Select()
+		fmt.Println(sql)
 		rows, err = db.Query(sql, val...)
 
 	}

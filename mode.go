@@ -83,7 +83,20 @@ func (self *Object) Filters(filters map[string]interface{}) *Object {
 	}
 	return self
 }
-
+func (self *Object) Orderby(names ...string) *Object {
+	typ := reflect.TypeOf(self.mode).Elem()
+	for i, name := range names {
+		fieldName := strings.Split(name, "__")
+		if field, ok := typ.FieldByName(fieldName[0]); ok {
+			if name = field.Tag.Get("field"); len(name) > 0 {
+				name = name + "__" + fieldName[1]
+				names[i] = name
+			}
+		}
+	}
+	self.params.order = names
+	return self
+}
 func (self *Object) Limit(s, steq int) *Object {
 	self.Lock()
 	defer self.Unlock()

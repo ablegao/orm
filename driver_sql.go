@@ -112,10 +112,6 @@ func (self MysqlModeToSql) Select() (sql string, val []interface{}) {
 		sql,
 	)
 
-	if self.Params.limit != NULL_LIMIT {
-		sql = sql + fmt.Sprintf(" LIMIT %d , %d", self.limit[0], self.limit[1])
-	}
-
 	if len(self.order) > 0 {
 		sql = sql + " ORDER BY "
 		ret := make([]string, len(self.order))
@@ -123,6 +119,10 @@ func (self MysqlModeToSql) Select() (sql string, val []interface{}) {
 			ret[id] = self.Params._w(v)
 		}
 		sql = sql + strings.Join(ret, ",")
+	}
+
+	if self.Params.limit != NULL_LIMIT {
+		sql = sql + fmt.Sprintf(" LIMIT %d , %d", self.limit[0], self.limit[1])
 	}
 
 	return
