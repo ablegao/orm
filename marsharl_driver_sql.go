@@ -5,10 +5,10 @@ import (
 	"strings"
 )
 
-type driversqlType func(param Params) ModuleToSql
+type driversqlType func(param ParamsInterface) ModuleToSql
 
 var driversql = map[string]driversqlType{
-	"mysql": func(param Params) ModuleToSql { return MysqlModeToSql{param} },
+	"mysql": func(param ParamsInterface) ModuleToSql { return MysqlModeToSql{param} },
 }
 
 func NewMarsharlDriverSql(driverName string, fun driversqlType) {
@@ -21,14 +21,14 @@ type ModuleToSql interface {
 	Update() (sql string, val []interface{})
 	Insert() (sql string, val []interface{})
 	Count() (sql string, val []interface{})
-	Instance(Params)
+	Instance(ParamsInterface)
 }
 
 type MysqlModeToSql struct {
-	Params
+	Params ParamsInterface
 }
 
-func (self MysqlModeToSql) Instance(param Params) {
+func (self MysqlModeToSql) Instance(param ParamsInterface) {
 	self.Params = param
 }
 
@@ -117,7 +117,7 @@ func (self MysqlModeToSql) _where() (sql string, val []interface{}) {
 	val = make([]interface{}, whereLen+orLen)
 
 	i := 0
-	for _, w := range self.where {
+	for _, w := range self.Params.GetWhere() {
 
 		//where = append(where, self.Params._w(w.name))
 		where[i] = self._w(w.name)
@@ -125,7 +125,7 @@ func (self MysqlModeToSql) _where() (sql string, val []interface{}) {
 		i = i + 1
 	}
 
-	for _, w := range self.Params.or {
+	for _, w := range self.Params.GetOr() {
 		or[i] = self._w(w.name)
 		val[i] = w.val
 		i = i + 1
@@ -143,9 +143,11 @@ func (self MysqlModeToSql) _where() (sql string, val []interface{}) {
 	return
 }
 func (self MysqlModeToSql) _set() (sql string, val []interface{}) {
-	set := make([]string, len(self.Params.set))
-	val = make([]interface{}, len(self.Params.set))
-	for i, v := range self.Params.set {
+	sets := self.Params.GetSet()
+	l := len(sets)
+	set := make([]string, l)
+	val = make([]interface{}, l)
+	for i, v := range sets {
 		set[i] = self._w(v.name)
 		val[i] = v.val
 	}
@@ -186,23 +188,23 @@ func (self MysqlModeToSql) Select() (sql string, val []interface{}) {
 
 	sql, val = self._where()
 	sql = fmt.Sprintf("SELECT `%s` FROM %s  %s",
-		strings.Join(self.Params.fields, "`,`"),
+		strings.Join(self.Params.GetFields(), "`,`"),
 		self.Params.GetTableName(),
 		sql,
 	)
-
-	if len(self.order) > 0 {
+	order := self.Params.GetOrder()
+	if len(order) > 0 {
 		sql = sql + " ORDER BY "
-		ret := make([]string, len(self.order))
-		for id, v := range self.Params.order {
+		ret := make([]string, len(order))
+		for id, v := range order {
 			ret[id] = self._w(v)
 		}
 		sql = sql + strings.Join(ret, ",")
 	}
+	limit := self.Params.GetLimit()
+	if limit != NULL_LIMIT {
 
-	if self.Params.limit != NULL_LIMIT {
-
-		sql = sql + fmt.Sprintf(" LIMIT %d , %d", (self.limit[0]-1)*self.limit[1], self.limit[1])
+		sql = sql + fmt.Sprintf(" LIMIT %d , %d", (limit[0]-1)*limit[1], limit[1])
 	}
 
 	return

@@ -171,6 +171,10 @@ func (self *Object) Delete() (int64, error) {
 				if val.Uint() > 0 {
 					self.Params.Filter(typ.Name, val.Uint())
 				}
+			case reflect.Float32, reflect.Float64:
+				if val.Float() > 0.0 {
+					self.Params.Filter(typ.Tag.Get("field"), val.Float())
+				}
 			}
 		}
 	}
@@ -213,6 +217,10 @@ func (self *Object) Save() (bool, int64, error) {
 				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 					if val.Uint() > 0 {
 						self.Params.Filter(typ.Tag.Get("field"), val.Uint())
+					}
+				case reflect.Float32, reflect.Float64:
+					if val.Float() > 0.0 {
+						self.Params.Filter(typ.Tag.Get("field"), val.Float())
 					}
 				}
 			}

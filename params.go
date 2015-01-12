@@ -41,6 +41,19 @@ type ParmaField struct {
 	val  interface{}
 }
 
+type ParamsInterface interface {
+	GetOrLen() int
+	GetWhereLen() int
+	GetSetLen() int
+	GetOr() []ParmaField
+	GetWhere() []ParmaField
+	GetSet() []ParmaField
+	GetFields() []string
+	GetOrder() []string
+	GetLimit() [2]int
+	GetTableName() string
+}
+
 /**
  传参解析
 **/
@@ -56,20 +69,45 @@ type Params struct {
 	insertsql string
 }
 
-func (self *Params) GetWhereLen() int {
+func (self Params) GetWhereLen() int {
 	return len(self.where)
 }
-func (self *Params) GetOrLen() int {
+func (self Params) GetOrLen() int {
 	return len(self.or)
 }
-func (self *Params) GetSetLen() int {
+func (self Params) GetSetLen() int {
 	return len(self.set)
 }
 
+func (self Params) GetWhere() []ParmaField {
+	return self.where
+}
+func (self Params) GetOr() []ParmaField {
+	return self.or
+}
+func (self Params) GetSet() []ParmaField {
+	return self.set
+}
+
+func (self Params) GetFields() []string {
+	return self.fields
+}
+func (self Params) GetOrder() []string {
+	return self.order
+}
+func (self Params) GetLimit() [2]int {
+	return self.limit
+}
 func (self *Params) Init() {
 	if len(self.connname) == 0 {
 		self.connname = "default"
 	}
+	self.where = self.where[len(self.where):]
+	self.or = self.or[len(self.or):]
+
+	self.set = self.set[len(self.set):]
+	self.fields = self.fields[len(self.fields):]
+	self.order = self.order[len(self.order):]
 }
 
 func (self *Params) SetTable(tbname string) {
@@ -125,8 +163,9 @@ func (self *Params) One() (row *sql.Row) {
 	//	self.stmt, err = self.db.Prepare()
 	if db, ok := databases[self.connname]; ok {
 
-		sql, val := driversql[db.DriverName](*self).Select()
+		sql, val := driversql[db.DriverName](self).Select()
 		row = db.QueryRow(sql, val...)
+
 	}
 	return
 }
@@ -182,12 +221,11 @@ func (self *Params) Save() (bool, int64, error) {
 		if err == nil {
 			defer stmt.Close()
 		} else {
-			panic(err)
+			return false, 0, err
 		}
 		res, err = stmt.Exec(val...)
 
 		if err != nil {
-			panic(err)
 			return false, 0, err
 		}
 		a, b := res.RowsAffected()
@@ -202,7 +240,6 @@ func (self *Params) Save() (bool, int64, error) {
 		}
 		res, err = stmt.Exec(val...)
 		if err != nil {
-			panic(err)
 			return true, 0, err
 		}
 		a, b := res.LastInsertId()
@@ -211,7 +248,7 @@ func (self *Params) Save() (bool, int64, error) {
 
 }
 
-func (self *Params) GetTableName() string {
+func (self Params) GetTableName() string {
 	tbname := ""
 	if tb := strings.Split(self.tbname, "."); len(tb) > 1 {
 		tbname = fmt.Sprintf("`%s`.`%s`", tb[0], tb[1])
