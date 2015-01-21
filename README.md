@@ -34,33 +34,33 @@ go get github.com/ablegao/orm
 
 ##新增 CacheModel 模型， 支持分布式redis作为数据库缓存。 
 
-import "github.com/ablegao/orm"
-import _ "github.com/go-sql-driver/mysql"
+	import "github.com/ablegao/orm"
+	import _ "github.com/go-sql-driver/mysql"
 
-type userB struct {
-	CacheModule
-	Uid     int64  `field:"Id" index:"pk" cache:"user" `
-	Alias   string `field:"Alias"`
-	Money int64  `field:"money"	`
-}
-
-func main(){
-	orm.CacheConsistent.Add("127.0.0.1:6379")  //添加多个redis服务器
-	orm.SetCachePrefix("nado") //默认nado .  将作为redis key 的前缀
-	NewDatabase("default", "mysql", "happy:passwd@tcp(127.0.0.1:3306)/mydatabase?charset=utf8")
-
-
-	b := new(userB)
-	b.Uid = 10000
-	err:=b.Objects(b).One()
-	if err!= nil {
-		panic(err)
+	type userB struct {
+		CacheModule
+		Uid     int64  `field:"Id" index:"pk" cache:"user" `
+		Alias   string `field:"Alias"`
+		Money int64  `field:"money"	`
 	}
-	fmt.Println(b.Uid ,b.Alias ,b.Money)
 
-	b.Incrby("Money" , 100)
-	fmt.Println(b.Money)
-	b.Save() //不执行不会保存到数据库 只会修改redis数据。 
+	func main(){
+		orm.CacheConsistent.Add("127.0.0.1:6379")  //添加多个redis服务器
+		orm.SetCachePrefix("nado") //默认nado .  将作为redis key 的前缀
+		NewDatabase("default", "mysql", "happy:passwd@tcp(127.0.0.1:3306)/mydatabase?charset=utf8")
 
 
-}
+		b := new(userB)
+		b.Uid = 10000
+		err:=b.Objects(b).One()
+		if err!= nil {
+			panic(err)
+		}
+		fmt.Println(b.Uid ,b.Alias ,b.Money)
+
+		b.Incrby("Money" , 100)
+		fmt.Println(b.Money)
+		b.Save() //不执行不会保存到数据库 只会修改redis数据。 
+
+
+	}
