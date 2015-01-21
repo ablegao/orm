@@ -30,7 +30,7 @@ go get github.com/ablegao/orm
 		Passwd string `field:"password"`
 	}
 
-更多信息>>(docs/mode.md)
+[更多信息>>](docs/mode.md)
 
 ##新增 CacheModel 模型， 支持分布式redis作为数据库缓存。 
 
