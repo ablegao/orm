@@ -3,7 +3,7 @@
 package orm
 
 import (
-	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 )
@@ -27,7 +27,6 @@ type Cache interface {
 	Hincrby(key, filed string, n int64) (int64, error)
 	Exists(key string) (bool, error)
 	Del(key string) (bool, error)
-	GetConnect()
 }
 
 func CacheMode(mode Module) (cache *CacheModule) {
@@ -40,6 +39,8 @@ func CacheMode(mode Module) (cache *CacheModule) {
 
 type CacheModuleInteerface interface {
 	Objects(Module) CacheModuleInteerface
+	Ca(interface{}) CacheModuleInteerface //一致性hash 默认处理方式
+	Db(string) CacheModuleInteerface      //数据库连接
 	GetCacheKey() string
 	Incrby(string, int64) (int64, error)
 	Incry(string) (int64, error)
@@ -62,7 +63,6 @@ func (self *CacheModule) Objects(mode Module) *CacheModule {
 	self.CacheFileds = []string{}
 	self.CacheNames = []string{}
 	self.Object.Objects(mode)
-
 	typeOf := reflect.TypeOf(self.mode).Elem()
 	for i := 0; i < typeOf.NumField(); i++ {
 		field := typeOf.Field(i)
@@ -73,8 +73,35 @@ func (self *CacheModule) Objects(mode Module) *CacheModule {
 		if prefix := field.Tag.Get("cache_prefix"); len(prefix) > 0 {
 			self.cache_prefix = prefix
 		}
+
 	}
-	//self.cachekey = self.GetCacheKey()
+	self.Cache = GetRedisClient("default")
+	return self
+}
+
+func (self *CacheModule) Db(name string) *CacheModule {
+	self.Params.Db(name)
+	return self
+}
+
+func (self *CacheModule) Ca(key interface{}) *CacheModule {
+	value := reflect.ValueOf(key)
+	typeOf := reflect.TypeOf(key)
+	b := []byte{}
+	switch typeOf.Kind() {
+	case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
+		b = strconv.AppendUint(b, value.Uint(), 10)
+	case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
+		b = strconv.AppendInt(b, value.Int(), 10)
+	case reflect.Float32, reflect.Float64:
+		b = strconv.AppendFloat(b, value.Float(), 'f', 0, 64)
+	case reflect.String:
+		b = append(b, []byte(value.String())...)
+	case reflect.Bool:
+		b = strconv.AppendBool(b, value.Bool())
+	}
+
+	self.Cache = GetRedisClient(string(b))
 	return self
 }
 
@@ -97,56 +124,85 @@ func (self *CacheModule) GetCacheKey() string {
 	}
 	return string(str)
 }
+func (self *CacheModule) setModeFieldUint(field string, val interface{}) {
 
-func (self CacheModule) Incrby(key string, val int64) (ret int64, err error) {
+	value := reflect.ValueOf(self.mode).Elem()
+	item := value.FieldByName(field)
+	switch item.Type().Kind() {
+	case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
+		item.SetUint(uint64(val.(int64)))
+	case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
+		item.SetInt(val.(int64))
+	default:
+		fmt.Println(field, item.Type().Kind())
+	}
+}
 
+func (self *CacheModule) Incrby(key string, val int64) (ret int64, err error) {
+	if self.cachekey == "" {
+		self.cachekey = self.GetCacheKey()
+	}
 	ret, err = self.Cache.Hincrby(self.cachekey, key, val)
 	if val > 0 {
 		self.Object.Change(key+"_add", val)
 	} else if val < 0 {
 		self.Object.Change(key+"_sub", val)
 	}
-	go self.Object.Save()
+	self.setModeFieldUint(key, ret)
+	//go self.Object.Save()
 	return
 }
 
-func (self CacheModule) Incry(key string) (val int64, err error) {
+func (self *CacheModule) Incry(key string) (val int64, err error) {
 	val, err = self.Incrby(key, 1)
 
 	return
 }
 
-func (self CacheModule) Set(key string, val interface{}) (err error) {
+func (self *CacheModule) Set(key string, val interface{}) (err error) {
+
 	b := []byte{}
+	field := reflect.ValueOf(self.mode).Elem().FieldByName(key)
 	switch val.(type) {
 	case uint32, uint64, uint16, uint8:
-		b = strconv.AppendUint(b, reflect.ValueOf(val).Uint(), 10)
+		val := reflect.ValueOf(val).Uint()
+		b = strconv.AppendUint(b, val, 10)
+		field.SetUint(val)
 	case string:
 		b = append(b, []byte(val.(string))...)
+		field.SetString(val.(string))
 	case int32, int64, int16, int8:
-		b = strconv.AppendInt(b, reflect.ValueOf(val).Int(), 10)
+		val := reflect.ValueOf(val).Int()
+		b = strconv.AppendInt(b, val, 10)
+		field.SetInt(val)
 	case float32, float64:
-		b = strconv.AppendFloat(b, reflect.ValueOf(val).Float(), 'f', 0, 64)
+		val := reflect.ValueOf(val).Float()
+		b = strconv.AppendFloat(b, val, 'f', 0, 64)
+		field.SetFloat(val)
 	case bool:
 		b = strconv.AppendBool(b, val.(bool))
+		field.SetBool(val.(bool))
+	}
+	if self.cachekey == "" {
+		self.cachekey = self.GetCacheKey()
 	}
 	_, err = self.Cache.Hset(self.cachekey, key, b)
 	if err != nil {
 		return
 	}
 
-	go self.Object.Change(key, val).Save()
+	//go self.Object.Change(key, val).Save()
 
 	return
 }
 
 func (self *CacheModule) Save() (isnew bool, id int64, err error) {
-	key := self.GetCacheKey()
-	if i, err := self.Exists(key); err == nil && i == false {
-		self.SaveToCache()
-	}
-	go self.Object.Save()
-	return
+	/*
+		key := self.GetCacheKey()
+		if i, err := self.Exists(key); err == nil && i == false {
+			self.SaveToCache()
+		}*/
+	return self.Object.Save()
 }
 
 func (self *CacheModule) All() ([]interface{}, error) {
@@ -175,32 +231,40 @@ func (self *CacheModule) All() ([]interface{}, error) {
 
 func (self *CacheModule) One() error {
 	key := self.getKey()
+	self.cachekey = key
 	n, err := self.Exists(key)
 	if err != nil {
 		return err
 	}
 	if n == false {
-		return errors.New("keys " + key + " not exists!")
-	}
-	val := reflect.ValueOf(self.mode).Elem()
-	typ := reflect.TypeOf(self.mode).Elem()
-	for i := 0; i < val.NumField(); i++ {
-		if b, err := self.Cache.Hget(key, typ.Field(i).Name); err == nil {
-			switch val.Field(i).Kind() {
-			case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
-				id, _ := strconv.ParseUint(string(b), 10, 64)
-				val.Field(i).SetUint(id)
-			case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
-				id, _ := strconv.ParseInt(string(b), 10, 64)
-				val.Field(i).SetInt(id)
-			case reflect.Float32, reflect.Float64:
-				id, _ := strconv.ParseFloat(string(b), 64)
-				val.Field(i).SetFloat(id)
-			case reflect.String:
-				val.Field(i).SetString(string(b))
-			case reflect.Bool:
-				id, _ := strconv.ParseBool(string(b))
-				val.Field(i).SetBool(id)
+		//return errors.New("keys " + key + " not exists!")
+
+		err = self.Object.One()
+		if err == nil {
+			defer self.SaveToCache()
+		}
+		return err
+	} else {
+		val := reflect.ValueOf(self.mode).Elem()
+		typ := reflect.TypeOf(self.mode).Elem()
+		for i := 0; i < val.NumField(); i++ {
+			if b, err := self.Cache.Hget(key, typ.Field(i).Name); err == nil {
+				switch val.Field(i).Kind() {
+				case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
+					id, _ := strconv.ParseUint(string(b), 10, 64)
+					val.Field(i).SetUint(id)
+				case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
+					id, _ := strconv.ParseInt(string(b), 10, 64)
+					val.Field(i).SetInt(id)
+				case reflect.Float32, reflect.Float64:
+					id, _ := strconv.ParseFloat(string(b), 64)
+					val.Field(i).SetFloat(id)
+				case reflect.String:
+					val.Field(i).SetString(string(b))
+				case reflect.Bool:
+					id, _ := strconv.ParseBool(string(b))
+					val.Field(i).SetBool(id)
+				}
 			}
 		}
 	}
@@ -224,8 +288,12 @@ func (self *CacheModule) where2Key() string {
 				str = append(str, []byte(":")...)
 				str = append(str, self.fieldToByte(wh.val)...)
 				str = append(str, []byte(":"+self.CacheNames[index])...)
+				goto NEXT
 			}
+
 		}
+		str = append(str, []byte(":*:"+self.CacheNames[index])...)
+	NEXT:
 	}
 	return string(str)
 }

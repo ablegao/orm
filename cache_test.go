@@ -1,29 +1,39 @@
 package orm
 
-import "testing"
+import (
+	"testing"
+
+	_ "github.com/go-sql-driver/mysql"
+)
 
 type userB struct {
 	CacheModule
-	Id        int64  `field:"id" index:"pk" auto:"true" cache:"user" `
-	Udid      string `field:"udid" index:"index" cache:"udid"`
-	Username  string `field:"username"`
-	Token     string `field:"token"`
-	Face      string `field:"face"`
-	Level     int64  `field:"level"`
-	Exp       int64  `field:"exp"`
-	Fpoint    int64  `field:"fb"`
-	LastLogin string `field:"last_login"`
-	WarNum    int64  `field:"warnum"`
-	WinNum    int64  `field:"winnum"`
+	Uid     int64  `field:"Id" index:"pk"  cache:"user" `
+	Alias   string `field:"Alias"`
+	Lingshi int64  `field:"Lingshi"	`
 }
 
 func (self *userB) GetTableName() string {
-	return "user"
+	return "user_disk"
 }
 
 func Test_connect(t *testing.T) {
-	b := new(userB)
-	b.Id = 1
-	b.Objects(b)
 
+	CacheConsistent.Add("127.0.0.1:6379")
+
+	_, err := NewDatabase("default", "mysql", "happy:passwd@tcp(127.0.0.1:3306)/mydatabase?charset=utf8")
+	if err != nil {
+		t.Error(err)
+	}
+	b := new(userB)
+	b.Uid = 10000
+	b.Objects(b).Ca(b.Uid).One()
+
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(b.Alias, b.Lingshi)
+	b.Incrby("Lingshi", 10)
+	b.Save()
+	t.Log(b.Lingshi)
 }

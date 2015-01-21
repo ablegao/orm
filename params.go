@@ -162,10 +162,10 @@ func (self *Params) One() (row *sql.Row) {
 	//rows, err = self.db.Query(self.execSelect())
 	//	self.stmt, err = self.db.Prepare()
 	if db, ok := databases[self.connname]; ok {
-
 		sql, val := driversql[db.DriverName](self).Select()
+		fmt.Println(sql)
+		fmt.Println(val)
 		row = db.QueryRow(sql, val...)
-
 	}
 	return
 }

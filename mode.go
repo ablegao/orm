@@ -161,7 +161,7 @@ func (self *Object) Delete() (int64, error) {
 	for i := 0; i < valus.NumField(); i++ {
 		typ := valus.Type().Field(i)
 		val := valus.Field(i)
-		if typ.Tag.Get("auto") == "true" {
+		if typ.Tag.Get("index") == "pk" {
 			switch val.Kind() {
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 				if val.Int() > 0 {
@@ -174,6 +174,10 @@ func (self *Object) Delete() (int64, error) {
 			case reflect.Float32, reflect.Float64:
 				if val.Float() > 0.0 {
 					self.Params.Filter(typ.Tag.Get("field"), val.Float())
+				}
+			case reflect.String:
+				if len(val.String()) > 0 {
+					self.Params.Filter(typ.Tag.Get("field"), val.String())
 				}
 			}
 		}
@@ -199,16 +203,23 @@ func (self *Object) Save() (bool, int64, error) {
 		for i := 0; i < valus.NumField(); i++ {
 			typ := valus.Type().Field(i)
 			val := valus.Field(i)
-			if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("auto") != "true" {
+			if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("index") != "pk" {
 				self.Params.Change(typ.Tag.Get("field"), val.Interface())
 			}
 		}
 	}
+	self.autoWhere()
+	isNew, id, err := self.Params.Save()
+	return isNew, id, err
+}
+
+func (self *Object) autoWhere() {
+	valus := reflect.ValueOf(self.mode).Elem()
 	if len(self.Params.where) == 0 {
 		for i := 0; i < valus.NumField(); i++ {
 			typ := valus.Type().Field(i)
 			val := valus.Field(i)
-			if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("auto") == "true" {
+			if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("index") == "pk" {
 				switch val.Kind() {
 				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 					if val.Int() > 0 {
@@ -222,19 +233,21 @@ func (self *Object) Save() (bool, int64, error) {
 					if val.Float() > 0.0 {
 						self.Params.Filter(typ.Tag.Get("field"), val.Float())
 					}
+				case reflect.String:
+					if len(val.String()) > 0 {
+						self.Params.Filter(typ.Tag.Get("field"), val.String())
+					}
 				}
 			}
 		}
 	}
-
-	isNew, id, err := self.Params.Save()
-	return isNew, id, err
 }
 
 //查找数据
 func (self *Object) All() ([]interface{}, error) {
 	self.Lock()
 	defer self.Unlock()
+	self.autoWhere()
 	if rows, err := self.Params.All(); err == nil {
 		defer rows.Close()
 
@@ -263,6 +276,7 @@ func (self *Object) All() ([]interface{}, error) {
 func (self *Object) One() error {
 	self.RLock()
 	defer self.RUnlock()
+	self.autoWhere()
 	if row := self.Params.One(); row != nil {
 		valMode := reflect.ValueOf(self.mode).Elem()
 		typeMode := reflect.TypeOf(self.mode).Elem()
