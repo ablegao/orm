@@ -135,7 +135,7 @@ func (self *CacheModule) setModeFieldUint(field string, val interface{}) {
 	case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
 		item.SetInt(val.(int64))
 	default:
-		fmt.Println(field, item.Type().Kind())
+		fmt.Println("(CacheModule) setModeFieldUint", field, item.Type().Kind())
 	}
 }
 
