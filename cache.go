@@ -30,10 +30,22 @@ type Cache interface {
 }
 
 func CacheMode(mode Module) (cache *CacheModule) {
-	cache.mode = mode
-	cache.Objects(mode)
-	cache.cachekey = cache.GetCacheKey()
-
+	cache = new(CacheModule)
+	cache.CacheFileds = []string{}
+	cache.CacheNames = []string{}
+	cache.Object.Objects(mode)
+	typeOf := reflect.TypeOf(cache.mode).Elem()
+	for i := 0; i < typeOf.NumField(); i++ {
+		field := typeOf.Field(i)
+		if name := field.Tag.Get("cache"); len(name) > 0 {
+			cache.CacheFileds = append(cache.CacheFileds, field.Tag.Get("field"))
+			cache.CacheNames = append(cache.CacheNames, name)
+		}
+		if prefix := field.Tag.Get("cache_prefix"); len(prefix) > 0 {
+			cache.cache_prefix = prefix
+		}
+	}
+	cache.Cache = GetRedisClient("default")
 	return
 }
 
@@ -41,6 +53,7 @@ type CacheModuleInteerface interface {
 	Objects(Module) CacheModuleInteerface
 	Ca(interface{}) CacheModuleInteerface //一致性hash 默认处理方式
 	Db(string) CacheModuleInteerface      //数据库连接
+	Filter(name string, val interface{}) CacheModuleInteerface
 	GetCacheKey() string
 	Incrby(string, int64) (int64, error)
 	Incry(string) (int64, error)
@@ -206,7 +219,13 @@ func (self *CacheModule) Save() (isnew bool, id int64, err error) {
 	return self.Object.Save()
 }
 
+func (self *CacheModule) Filter(name string, val interface{}) *CacheModule {
+	self.Object.Filter(name, val)
+	return self
+}
+
 func (self *CacheModule) All() ([]interface{}, error) {
+	fmt.Println("=================111=")
 
 	if keys, err := self.Keys(self.getKey()); err == nil && len(keys) > 0 {
 		vals := make([]interface{}, len(keys))
@@ -219,8 +238,19 @@ func (self *CacheModule) All() ([]interface{}, error) {
 	} else {
 		//self.Object.All()
 		if rets, err := self.Object.All(); err == nil {
+			fmt.Println("==================")
 			for _, item := range rets {
-				item.(CacheModuleInteerface).Objects(item.(Module)).Ca(self.cache_address).SaveToCache()
+				self.saveToCache(item.(Module))
+				/*
+					if err := CacheModuleInteerface(item).
+						Objects(item.(Module)).
+						Ca(self.cache_address).
+						SaveToCache(); err != nil {
+						fmt.Errorf("CacheModule.all save item to cache :%v", err.Error())
+					} else {
+						fmt.Println("11111111")
+					}*/
+
 			}
 			return rets, nil
 		} else {
@@ -364,7 +394,9 @@ func (self *CacheModule) key2Mode(key string) interface{} {
 	}
 	return val.Interface()
 }
-
+func (self CacheModule) saveToCache(mode Module) error {
+	return CacheMode(mode).Ca(self.cache_address).SaveToCache()
+}
 func (self *CacheModule) SaveToCache() error {
 	key := self.GetCacheKey()
 	maping := map[string]interface{}{}
