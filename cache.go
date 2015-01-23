@@ -53,10 +53,11 @@ type CacheModuleInteerface interface {
 type CacheModule struct {
 	Cache
 	Object
-	cachekey     string
-	CacheFileds  []string
-	CacheNames   []string
-	cache_prefix string
+	cachekey      string
+	CacheFileds   []string
+	CacheNames    []string
+	cache_prefix  string
+	cache_address string
 }
 
 func (self *CacheModule) Objects(mode Module) *CacheModule {
@@ -100,8 +101,8 @@ func (self *CacheModule) Ca(key interface{}) *CacheModule {
 	case reflect.Bool:
 		b = strconv.AppendBool(b, value.Bool())
 	}
-
-	self.Cache = GetRedisClient(string(b))
+	self.cache_address = string(b)
+	self.Cache = GetRedisClient(self.cache_address)
 	return self
 }
 
@@ -219,7 +220,7 @@ func (self *CacheModule) All() ([]interface{}, error) {
 		//self.Object.All()
 		if rets, err := self.Object.All(); err == nil {
 			for _, item := range rets {
-				item.(CacheModuleInteerface).Objects(item.(Module)).SaveToCache()
+				item.(CacheModuleInteerface).Objects(item.(Module)).Ca(self.cache_address).SaveToCache()
 			}
 			return rets, nil
 		} else {
@@ -372,6 +373,13 @@ func (self *CacheModule) SaveToCache() error {
 	for i := 0; i < vals.NumField(); i++ {
 		field := typ.Field(i)
 		if name := field.Tag.Get("field"); len(name) > 0 {
+			if nocache := field.Tag.Get("no_cache"); len(nocache) == 0 {
+				maping[field.Name] = vals.Field(i).Interface()
+			}
+		}
+
+		//补充一个仅存在于cache中的字段。
+		if name := field.Tag.Get("cache_only_field"); len(name) > 0 {
 			maping[field.Name] = vals.Field(i).Interface()
 		}
 	}
