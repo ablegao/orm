@@ -5,6 +5,7 @@ package orm
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strconv"
 )
 
@@ -211,11 +212,11 @@ func (self *CacheModule) Set(key string, val interface{}) (err error) {
 }
 
 func (self *CacheModule) Save() (isnew bool, id int64, err error) {
-	/*
-		key := self.GetCacheKey()
-		if i, err := self.Exists(key); err == nil && i == false {
-			self.SaveToCache()
-		}*/
+
+	key := self.GetCacheKey()
+	if i, err := self.Exists(key); err == nil && i == false {
+		self.SaveToCache()
+	}
 	return self.Object.Save()
 }
 
@@ -223,12 +224,22 @@ func (self *CacheModule) Filter(name string, val interface{}) *CacheModule {
 	self.Object.Filter(name, val)
 	return self
 }
-
+func (self *CacheModule) Orderby(order ...string) *CacheModule {
+	self.Object.Orderby(order...)
+	return self
+}
+func (self *CacheModule) Limit(page, step int) *CacheModule {
+	self.Object.Limit(page, step)
+	return self
+}
 func (self *CacheModule) All() ([]interface{}, error) {
 	fmt.Println("=================111=")
 
 	if keys, err := self.Keys(self.getKey()); err == nil && len(keys) > 0 {
 		vals := make([]interface{}, len(keys))
+		//(keys)
+		sort.Sort(sort.StringSlice(keys))
+		fmt.Println(keys)
 		for i, k := range keys {
 			vals[i] = self.key2Mode(k)
 		}
@@ -370,9 +381,9 @@ func (self *CacheModule) fieldToByte(value interface{}) (str []byte) {
 }
 
 func (self *CacheModule) key2Mode(key string) interface{} {
-	val := reflect.New(reflect.TypeOf(self.mode).Elem())
-	typ := val.Type()
-	for i := 0; i < val.NumField(); i++ {
+	typ := reflect.TypeOf(self.mode).Elem()
+	val := reflect.New(typ).Elem()
+	for i := 0; i < typ.NumField(); i++ {
 		if b, err := self.Cache.Hget(key, typ.Field(i).Name); err == nil {
 			switch val.Field(i).Kind() {
 			case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
@@ -392,7 +403,7 @@ func (self *CacheModule) key2Mode(key string) interface{} {
 			}
 		}
 	}
-	return val.Interface()
+	return val.Addr().Interface()
 }
 func (self CacheModule) saveToCache(mode Module) error {
 	return CacheMode(mode).Ca(self.cache_address).SaveToCache()
