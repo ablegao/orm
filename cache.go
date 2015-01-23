@@ -233,23 +233,38 @@ func (self *CacheModule) Limit(page, step int) *CacheModule {
 	return self
 }
 func (self *CacheModule) All() ([]interface{}, error) {
-	fmt.Println("=================111=")
-
 	if keys, err := self.Keys(self.getKey()); err == nil && len(keys) > 0 {
-		vals := make([]interface{}, len(keys))
+
 		//(keys)
 		sort.Sort(sort.StringSlice(keys))
-		fmt.Println(keys)
-		for i, k := range keys {
-			vals[i] = self.key2Mode(k)
+		if self.limit != NULL_LIMIT {
+			page := (self.limit[0] - 1) * self.limit[1]
+			step := self.limit[0] * self.limit[1]
+			if step > len(keys) {
+				step = len(keys)
+			}
+			if page < len(keys) {
+				keys = keys[page:step]
+				vals := make([]interface{}, len(keys))
+				for i, k := range keys {
+					vals[i] = self.key2Mode(k)
+				}
+				return vals, nil
+			} else {
+				return make([]interface{}, 0), nil
+			}
+		} else {
+			vals := make([]interface{}, len(keys))
+			for i, k := range keys {
+				vals[i] = self.key2Mode(k)
+			}
 		}
-		return vals, nil
+		return make([]interface{}, 0), nil
 	} else if err != nil {
 		return nil, err
 	} else {
 		//self.Object.All()
 		if rets, err := self.Object.All(); err == nil {
-			fmt.Println("==================")
 			for _, item := range rets {
 				self.saveToCache(item.(Module))
 				/*
