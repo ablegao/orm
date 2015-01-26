@@ -3,6 +3,7 @@
 package orm
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
@@ -62,6 +63,8 @@ type CacheModuleInteerface interface {
 	Save() (bool, int64, error)
 	One() error
 	SaveToCache() error
+	All() ([]interface{}, error)
+	AllCache() ([]interface{}, error)
 }
 
 type CacheModule struct {
@@ -232,9 +235,8 @@ func (self *CacheModule) Limit(page, step int) *CacheModule {
 	self.Object.Limit(page, step)
 	return self
 }
-func (self *CacheModule) All() ([]interface{}, error) {
+func (self *CacheModule) AllOnCache() ([]interface{}, error) {
 	if keys, err := self.Keys(self.getKey()); err == nil && len(keys) > 0 {
-
 		//(keys)
 		sort.Sort(sort.StringSlice(keys))
 		if self.limit != NULL_LIMIT {
@@ -260,33 +262,32 @@ func (self *CacheModule) All() ([]interface{}, error) {
 			}
 		}
 		return make([]interface{}, 0), nil
-	} else if err != nil {
+	} else {
+		if err == nil {
+			return []interface{}{}, nil
+		}
 		return nil, err
+	}
+}
+func (self *CacheModule) All() ([]interface{}, error) {
+	if rets, err := self.AllOnCache(); err == nil && len(rets) > 0 {
+		return rets, err
 	} else {
 		//self.Object.All()
 		if rets, err := self.Object.All(); err == nil {
+			fmt.Println(len(rets))
 			for _, item := range rets {
 				self.saveToCache(item.(Module))
-				/*
-					if err := CacheModuleInteerface(item).
-						Objects(item.(Module)).
-						Ca(self.cache_address).
-						SaveToCache(); err != nil {
-						fmt.Errorf("CacheModule.all save item to cache :%v", err.Error())
-					} else {
-						fmt.Println("11111111")
-					}*/
-
 			}
 			return rets, nil
 		} else {
 			return nil, err
 		}
+
 	}
-	return nil, nil
 }
 
-func (self *CacheModule) One() error {
+func (self *CacheModule) OneOnCache() error {
 	key := self.getKey()
 	self.cachekey = key
 	n, err := self.Exists(key)
@@ -294,39 +295,59 @@ func (self *CacheModule) One() error {
 		return err
 	}
 	if n == false {
-		//return errors.New("keys " + key + " not exists!")
-
-		err = self.Object.One()
-		if err == nil {
-			defer self.SaveToCache()
-		}
-		return err
-	} else {
-		val := reflect.ValueOf(self.mode).Elem()
-		typ := reflect.TypeOf(self.mode).Elem()
-		for i := 0; i < val.NumField(); i++ {
-			if b, err := self.Cache.Hget(key, typ.Field(i).Name); err == nil {
-				switch val.Field(i).Kind() {
-				case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
-					id, _ := strconv.ParseUint(string(b), 10, 64)
-					val.Field(i).SetUint(id)
-				case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
-					id, _ := strconv.ParseInt(string(b), 10, 64)
-					val.Field(i).SetInt(id)
-				case reflect.Float32, reflect.Float64:
-					id, _ := strconv.ParseFloat(string(b), 64)
-					val.Field(i).SetFloat(id)
-				case reflect.String:
-					val.Field(i).SetString(string(b))
-				case reflect.Bool:
-					id, _ := strconv.ParseBool(string(b))
-					val.Field(i).SetBool(id)
-				}
+		return errors.New("not found in cache!")
+	}
+	val := reflect.ValueOf(self.mode).Elem()
+	typ := reflect.TypeOf(self.mode).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		if b, err := self.Cache.Hget(key, typ.Field(i).Name); err == nil {
+			switch val.Field(i).Kind() {
+			case reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uint8, reflect.Uint16:
+				id, _ := strconv.ParseUint(string(b), 10, 64)
+				val.Field(i).SetUint(id)
+			case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
+				id, _ := strconv.ParseInt(string(b), 10, 64)
+				val.Field(i).SetInt(id)
+			case reflect.Float32, reflect.Float64:
+				id, _ := strconv.ParseFloat(string(b), 64)
+				val.Field(i).SetFloat(id)
+			case reflect.String:
+				val.Field(i).SetString(string(b))
+			case reflect.Bool:
+				id, _ := strconv.ParseBool(string(b))
+				val.Field(i).SetBool(id)
 			}
 		}
 	}
 	return nil
 }
+
+func (self *CacheModule) One() error {
+
+	if err := self.OneOnCache(); err != nil {
+		//return errors.New("keys " + key + " not exists!")
+		err = self.Object.One()
+		if err == nil {
+			defer self.SaveToCache()
+		}
+		return err
+	}
+	return nil
+}
+func (self *CacheModule) CountOnCache() (int64, error) {
+	if keys, err := self.Cache.Keys(self.getKey()); err == nil {
+		return int64(len(keys)), nil
+	} else {
+		return 0, err
+	}
+}
+func (self *CacheModule) Count() (int64, error) {
+	if keys, err := self.Cache.Keys(self.getKey()); err == nil && len(keys) > 0 {
+		return int64(len(keys)), nil
+	}
+	return self.Object.Count()
+}
+
 func (self *CacheModule) getKey() string {
 	key := ""
 	if len(self.where) > 0 {
