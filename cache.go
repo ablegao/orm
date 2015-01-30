@@ -17,6 +17,12 @@ func SetCachePrefix(str string) {
 	cache_prefix = []byte(str)
 }
 
+var debug_sql bool = false
+
+func SetDebug(b bool) {
+	debug_sql = b
+}
+
 type Cache interface {
 	Set(key string, b []byte) error
 	Get(key string) ([]byte, error)
@@ -161,10 +167,10 @@ func (self *CacheModule) Incrby(key string, val int64) (ret int64, err error) {
 		self.cachekey = self.GetCacheKey()
 	}
 	ret, err = self.Cache.Hincrby(self.cachekey, key, val)
-	if val > 0 {
-		self.Object.Change(key+"_add", val)
+	if val >= 0 {
+		self.Object.Change(key+"__add", val)
 	} else if val < 0 {
-		self.Object.Change(key+"_sub", val)
+		self.Object.Change(key+"__sub", val)
 	}
 	self.setModeFieldUint(key, ret)
 	//go self.Object.Save()
@@ -275,7 +281,6 @@ func (self *CacheModule) All() ([]interface{}, error) {
 	} else {
 		//self.Object.All()
 		if rets, err := self.Object.All(); err == nil {
-			fmt.Println(len(rets))
 			for _, item := range rets {
 				self.saveToCache(item.(Module))
 			}
@@ -297,6 +302,7 @@ func (self *CacheModule) OneOnCache() error {
 	if n == false {
 		return errors.New("not found in cache!")
 	}
+	self.where = self.where[len(self.where):]
 	val := reflect.ValueOf(self.mode).Elem()
 	typ := reflect.TypeOf(self.mode).Elem()
 	for i := 0; i < val.NumField(); i++ {
@@ -317,8 +323,12 @@ func (self *CacheModule) OneOnCache() error {
 				id, _ := strconv.ParseBool(string(b))
 				val.Field(i).SetBool(id)
 			}
+			if index := typ.Field(i).Tag.Get("index"); len(index) > 0 {
+				self.Object.Filter(typ.Field(i).Name, val.Field(i).Interface())
+			}
 		}
 	}
+	self.hasRow = true
 	return nil
 }
 

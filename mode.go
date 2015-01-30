@@ -203,11 +203,18 @@ func (self *Object) Save() (bool, int64, error) {
 		for i := 0; i < valus.NumField(); i++ {
 			typ := valus.Type().Field(i)
 			val := valus.Field(i)
-			if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("index") != "pk" {
-				self.Params.Change(typ.Tag.Get("field"), val.Interface())
+			if self.hasRow {
+				if len(typ.Tag.Get("field")) > 0 && typ.Tag.Get("index") != "pk" {
+					self.Params.Change(typ.Tag.Get("field"), val.Interface())
+				}
+			} else {
+				if len(typ.Tag.Get("field")) > 0 {
+					self.Params.Change(typ.Tag.Get("field"), val.Interface())
+				}
 			}
 		}
 	}
+
 	self.autoWhere()
 	isNew, id, err := self.Params.Save()
 	return isNew, id, err
@@ -241,6 +248,7 @@ func (self *Object) autoWhere() {
 			}
 		}
 	}
+
 }
 
 //查找数据
@@ -277,18 +285,19 @@ func (self *Object) One() error {
 	self.RLock()
 	defer self.RUnlock()
 	self.autoWhere()
-	if row := self.Params.One(); row != nil {
-		valMode := reflect.ValueOf(self.mode).Elem()
-		typeMode := reflect.TypeOf(self.mode).Elem()
-		vals := []interface{}{}
-		for i := 0; i < valMode.NumField(); i++ {
-			if name := typeMode.Field(i).Tag.Get("field"); len(name) > 0 {
-				//vals[i] = valMode.Field(i).Addr().Interface()
-				vals = append(vals, valMode.Field(i).Addr().Interface())
-			}
+	valMode := reflect.ValueOf(self.mode).Elem()
+	typeMode := reflect.TypeOf(self.mode).Elem()
+	vals := []interface{}{}
+	for i := 0; i < valMode.NumField(); i++ {
+		if name := typeMode.Field(i).Tag.Get("field"); len(name) > 0 {
+			//vals[i] = valMode.Field(i).Addr().Interface()
+			vals = append(vals, valMode.Field(i).Addr().Interface())
 		}
-		err := row.Scan(vals...)
+	}
+	err := self.Params.One(vals...)
+	if err == nil {
+		return nil
+	} else {
 		return err
 	}
-	return errors.New("Get error")
 }

@@ -67,6 +67,7 @@ type Params struct {
 	order     []string
 	limit     [2]int
 	insertsql string
+	hasRow    bool
 }
 
 func (self Params) GetWhereLen() int {
@@ -102,6 +103,7 @@ func (self *Params) Init() {
 	if len(self.connname) == 0 {
 		self.connname = "default"
 	}
+	self.hasRow = false
 	self.where = self.where[len(self.where):]
 	self.or = self.or[len(self.or):]
 
@@ -145,8 +147,8 @@ func (self *Params) All() (rows *sql.Rows, err error) {
 		return
 	} else {
 
-		sql, val := driversql[db.DriverName](*self).Select()
-		rows, err = db.Query(sql, val...)
+		sqls, val := driversql[db.DriverName](*self).Select()
+		rows, err = db.Query(sqls, val...)
 		if err != nil {
 			panic(err)
 		}
@@ -158,21 +160,29 @@ func (self *Params) Db(name string) *Params {
 	self.connname = name
 	return self
 }
-func (self *Params) One() (row *sql.Row) {
+func (self *Params) One(vals ...interface{}) error {
 	//rows, err = self.db.Query(self.execSelect())
 	//	self.stmt, err = self.db.Prepare()
 	if db, ok := databases[self.connname]; ok {
-		sql, val := driversql[db.DriverName](self).Select()
-		row = db.QueryRow(sql, val...)
+		sqls, val := driversql[db.DriverName](self).Select()
+		err := db.QueryRow(sqls, val...).Scan(vals...)
+		switch {
+		case err == sql.ErrNoRows:
+			return err
+		case err != nil:
+			return err
+		default:
+			self.hasRow = true
+		}
 	}
-	return
+	return nil
 }
 func (self *Params) Delete() (res sql.Result, err error) {
 	var stmt *sql.Stmt
 	if db, ok := databases[self.connname]; ok {
 
-		sql, val := driversql[db.DriverName](*self).Delete()
-		stmt, err = db.Prepare(sql)
+		sqls, val := driversql[db.DriverName](*self).Delete()
+		stmt, err = db.Prepare(sqls)
 		if err == nil {
 			defer stmt.Close()
 		}
@@ -188,8 +198,8 @@ func (self *Params) Delete() (res sql.Result, err error) {
 
 func (self *Params) Count() (int64, error) {
 	if db, ok := databases[self.connname]; ok {
-		sql, val := driversql[db.DriverName](*self).Count()
-		row := db.QueryRow(sql, val...)
+		sqls, val := driversql[db.DriverName](*self).Count()
+		row := db.QueryRow(sqls, val...)
 
 		var c int64
 		if err := row.Scan(&c); err == nil {
@@ -209,13 +219,20 @@ func (self *Params) Save() (bool, int64, error) {
 	if !ok {
 		panic("Database " + self.connname + " not defined.")
 	}
-
+	defer func() {
+		self.set = self.set[len(self.set):]
+	}()
 	var err error
 	var stmt *sql.Stmt
 	var res sql.Result
-	if len(self.where) > 0 {
-		sql, val := driversql[db.DriverName](*self).Update()
-		stmt, err = db.Prepare(sql)
+	//var n int64
+	//if n , err= self.Count();err == nil && n >0
+	if self.hasRow {
+		sqls, val := driversql[db.DriverName](*self).Update()
+		if debug_sql {
+			fmt.Println("save update ", sqls, val)
+		}
+		stmt, err = db.Prepare(sqls)
 		if err == nil {
 			defer stmt.Close()
 		} else {
@@ -229,8 +246,11 @@ func (self *Params) Save() (bool, int64, error) {
 		a, b := res.RowsAffected()
 		return false, a, b
 	} else {
-		sql, val := driversql[db.DriverName](*self).Insert()
-		stmt, err = db.Prepare(sql)
+		sqls, val := driversql[db.DriverName](*self).Insert()
+		if debug_sql {
+			fmt.Println("save insert ", sqls, val)
+		}
+		stmt, err = db.Prepare(sqls)
 		if err == nil {
 			defer stmt.Close()
 		} else {
@@ -241,6 +261,7 @@ func (self *Params) Save() (bool, int64, error) {
 			return true, 0, err
 		}
 		a, b := res.LastInsertId()
+		self.hasRow = true
 		return true, a, b
 	}
 
