@@ -308,6 +308,7 @@ func (self *Object) One() error {
 	}
 	err := self.Params.One(vals...)
 	if err == nil {
+		self.where = self.where[len(self.where):]
 		return nil
 	} else {
 		return err

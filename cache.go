@@ -14,6 +14,10 @@ import (
 var cache_prefix []byte = []byte("nado")
 var st []byte = []byte("*")
 
+var (
+	ErrKeyNotExist = errors.New("keys not exists")
+)
+
 func SetCachePrefix(str string) {
 	cache_prefix = []byte(str)
 }
@@ -303,7 +307,7 @@ func (self *CacheModule) OneOnCache() error {
 		return err
 	}
 	if n == false {
-		return errors.New("not found in cache!")
+		return ErrKeyNotExist
 	}
 
 	self.where = self.where[len(self.where):]
