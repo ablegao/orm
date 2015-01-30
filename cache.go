@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"time"
 )
 
 var cache_prefix []byte = []byte("nado")
@@ -206,6 +207,8 @@ func (self *CacheModule) Set(key string, val interface{}) (err error) {
 	case bool:
 		b = strconv.AppendBool(b, val.(bool))
 		field.SetBool(val.(bool))
+	case time.Time:
+		field.SetString(val.(time.Time).Format(time.RFC1123Z))
 	}
 	if self.cachekey == "" {
 		self.cachekey = self.GetCacheKey()
@@ -302,6 +305,7 @@ func (self *CacheModule) OneOnCache() error {
 	if n == false {
 		return errors.New("not found in cache!")
 	}
+
 	self.where = self.where[len(self.where):]
 	val := reflect.ValueOf(self.mode).Elem()
 	typ := reflect.TypeOf(self.mode).Elem()
@@ -322,6 +326,13 @@ func (self *CacheModule) OneOnCache() error {
 			case reflect.Bool:
 				id, _ := strconv.ParseBool(string(b))
 				val.Field(i).SetBool(id)
+			default:
+				switch val.Field(i).Interface().(type) {
+				case time.Time:
+					if time, e := time.Parse(time.RFC1123Z, string(b)); e == nil {
+						val.Field(i).Set(reflect.ValueOf(time))
+					}
+				}
 			}
 			if index := typ.Field(i).Tag.Get("index"); len(index) > 0 {
 				self.Object.Filter(typ.Field(i).Name, val.Field(i).Interface())
@@ -422,6 +433,11 @@ func (self *CacheModule) fieldToByte(value interface{}) (str []byte) {
 		case false:
 			str = append(str, []byte("false")...)
 		}
+	default:
+		switch value.(type) {
+		case time.Time:
+			str = append(str, []byte(value.(time.Time).Format(time.RFC1123Z))...)
+		}
 	}
 	return
 }
@@ -446,6 +462,14 @@ func (self *CacheModule) key2Mode(key string) interface{} {
 			case reflect.Bool:
 				id, _ := strconv.ParseBool(string(b))
 				val.Field(i).SetBool(id)
+			default:
+				switch val.Field(i).Interface().(type) {
+				case time.Time:
+					//str = append(str, []byte(values.(time.Time).Format(time.RFC1123Z))...)
+					if time, e := time.Parse(time.RFC1123Z, string(b)); e == nil {
+						val.Field(i).Set(reflect.ValueOf(time))
+					}
+				}
 			}
 		}
 	}
@@ -463,13 +487,23 @@ func (self *CacheModule) SaveToCache() error {
 		field := typ.Field(i)
 		if name := field.Tag.Get("field"); len(name) > 0 {
 			if nocache := field.Tag.Get("no_cache"); len(nocache) == 0 {
-				maping[field.Name] = vals.Field(i).Interface()
+				switch vals.Field(i).Interface().(type) {
+				case time.Time:
+					maping[field.Name] = vals.Field(i).Interface().(time.Time).Format(time.RFC1123Z)
+				default:
+					maping[field.Name] = vals.Field(i).Interface()
+				}
 			}
 		}
 
 		//补充一个仅存在于cache中的字段。
 		if name := field.Tag.Get("cache_only_field"); len(name) > 0 {
-			maping[field.Name] = vals.Field(i).Interface()
+			switch vals.Field(i).Interface().(type) {
+			case time.Time:
+				maping[field.Name] = vals.Field(i).Interface().(time.Time).Format(time.RFC1123Z)
+			default:
+				maping[field.Name] = vals.Field(i).Interface()
+			}
 		}
 	}
 	return self.Hmset(key, maping)

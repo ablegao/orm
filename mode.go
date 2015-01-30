@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Module interface {
@@ -179,6 +180,11 @@ func (self *Object) Delete() (int64, error) {
 				if len(val.String()) > 0 {
 					self.Params.Filter(typ.Tag.Get("field"), val.String())
 				}
+			default:
+				switch val.Interface().(type) {
+				case time.Time:
+					self.Params.Filter(typ.Tag.Get("field"), val.Interface())
+				}
 			}
 		}
 	}
@@ -244,6 +250,12 @@ func (self *Object) autoWhere() {
 					if len(val.String()) > 0 {
 						self.Params.Filter(typ.Tag.Get("field"), val.String())
 					}
+				default:
+					switch val.Interface().(type) {
+					case time.Time:
+						self.Params.Filter(typ.Tag.Get("field"), val.Interface())
+					}
+
 				}
 			}
 		}
