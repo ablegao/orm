@@ -5,12 +5,15 @@ package orm
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"reflect"
 	"sort"
 	"strconv"
 	"time"
 )
 
+var Debug = log.New(os.Stdout, "ORM-DEBUG", log.Lshortfile|log.LstdFlags)
 var cache_prefix []byte = []byte("nado")
 var st []byte = []byte("*")
 
@@ -299,9 +302,22 @@ func (self *CacheModule) All() ([]interface{}, error) {
 	}
 }
 
+func (self *CacheModule) DeleteOnCache() error {
+	if len(self.cachekey) <= 0 {
+		self.cachekey = self.getKey()
+	}
+	if _, err := self.Del(self.cachekey); err != nil {
+		return err
+	}
+
+	return nil
+}
 func (self *CacheModule) OneOnCache() error {
 	key := self.getKey()
 	self.cachekey = key
+	if debug_sql {
+		Debug.Println("keys ", self.cachekey)
+	}
 	n, err := self.Exists(key)
 	if err != nil {
 		return err
@@ -309,7 +325,9 @@ func (self *CacheModule) OneOnCache() error {
 	if n == false {
 		return ErrKeyNotExist
 	}
-
+	if debug_sql {
+		Debug.Println("keys exists", n)
+	}
 	self.where = self.where[len(self.where):]
 	val := reflect.ValueOf(self.mode).Elem()
 	typ := reflect.TypeOf(self.mode).Elem()
@@ -351,6 +369,9 @@ func (self *CacheModule) One() error {
 
 	if err := self.OneOnCache(); err != nil {
 		//return errors.New("keys " + key + " not exists!")
+		if debug_sql {
+			Debug.Println(err)
+		}
 		err = self.Object.One()
 		if err == nil {
 			defer self.SaveToCache()

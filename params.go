@@ -148,6 +148,9 @@ func (self *Params) All() (rows *sql.Rows, err error) {
 	} else {
 
 		sqls, val := driversql[db.DriverName](*self).Select()
+		if debug_sql {
+			Debug.Println("select all ", sqls, val)
+		}
 		rows, err = db.Query(sqls, val...)
 		if err != nil {
 			panic(err)
@@ -165,6 +168,9 @@ func (self *Params) One(vals ...interface{}) error {
 	//	self.stmt, err = self.db.Prepare()
 	if db, ok := databases[self.connname]; ok {
 		sqls, val := driversql[db.DriverName](self).Select()
+		if debug_sql {
+			Debug.Println("select One ", sqls, val)
+		}
 		err := db.QueryRow(sqls, val...).Scan(vals...)
 		switch {
 		case err == sql.ErrNoRows:
@@ -182,6 +188,9 @@ func (self *Params) Delete() (res sql.Result, err error) {
 	if db, ok := databases[self.connname]; ok {
 
 		sqls, val := driversql[db.DriverName](*self).Delete()
+		if debug_sql {
+			Debug.Println("delete  ", sqls, val)
+		}
 		stmt, err = db.Prepare(sqls)
 		if err == nil {
 			defer stmt.Close()
@@ -199,6 +208,9 @@ func (self *Params) Delete() (res sql.Result, err error) {
 func (self *Params) Count() (int64, error) {
 	if db, ok := databases[self.connname]; ok {
 		sqls, val := driversql[db.DriverName](*self).Count()
+		if debug_sql {
+			Debug.Println("count  ", sqls, val)
+		}
 		row := db.QueryRow(sqls, val...)
 
 		var c int64
@@ -230,7 +242,7 @@ func (self *Params) Save() (bool, int64, error) {
 	if self.hasRow {
 		sqls, val := driversql[db.DriverName](*self).Update()
 		if debug_sql {
-			fmt.Println("save update ", sqls, val)
+			Debug.Println("save update ", sqls, val)
 		}
 		stmt, err = db.Prepare(sqls)
 		if err == nil {
@@ -248,7 +260,7 @@ func (self *Params) Save() (bool, int64, error) {
 	} else {
 		sqls, val := driversql[db.DriverName](*self).Insert()
 		if debug_sql {
-			fmt.Println("save insert ", sqls, val)
+			Debug.Println("save insert ", sqls, val)
 		}
 		stmt, err = db.Prepare(sqls)
 		if err == nil {
