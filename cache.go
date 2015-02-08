@@ -4,7 +4,6 @@ package orm
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"reflect"
@@ -14,6 +13,7 @@ import (
 )
 
 var Debug = log.New(os.Stdout, "ORM-DEBUG", log.Lshortfile|log.LstdFlags)
+var Error = log.New(os.Stdout, "ORM-ERROR", log.Lshortfile|log.LstdFlags)
 var cache_prefix []byte = []byte("nado")
 var st []byte = []byte("*")
 
@@ -116,7 +116,7 @@ func (self *CacheModule) Db(name string) *CacheModule {
 	return self
 }
 
-func (self *CacheModule) Ca(key interface{}) *CacheModule {
+func GetCacheConn(key interface{}) (address string, c Cache) {
 	value := reflect.ValueOf(key)
 	typeOf := reflect.TypeOf(key)
 	b := []byte{}
@@ -132,8 +132,13 @@ func (self *CacheModule) Ca(key interface{}) *CacheModule {
 	case reflect.Bool:
 		b = strconv.AppendBool(b, value.Bool())
 	}
-	self.cache_address = string(b)
-	self.Cache = GetRedisClient(self.cache_address)
+	address = string(b)
+	c = GetRedisClient(address)
+	return
+}
+
+func (self *CacheModule) Ca(key interface{}) *CacheModule {
+	self.cache_address, self.Cache = GetCacheConn(key)
 	return self
 }
 
@@ -166,7 +171,7 @@ func (self *CacheModule) setModeFieldUint(field string, val interface{}) {
 	case reflect.Int32, reflect.Int64, reflect.Int, reflect.Int8, reflect.Int16:
 		item.SetInt(val.(int64))
 	default:
-		fmt.Println("(CacheModule) setModeFieldUint", field, item.Type().Kind())
+		Error.Println("(CacheModule) setModeFieldUint", field, item.Type().Kind())
 	}
 }
 
@@ -196,14 +201,14 @@ func (self *CacheModule) Set(key string, val interface{}) (err error) {
 	b := []byte{}
 	field := reflect.ValueOf(self.mode).Elem().FieldByName(key)
 	switch val.(type) {
-	case uint32, uint64, uint16, uint8:
+	case uint32, uint64, uint16, uint8, uint:
 		val := reflect.ValueOf(val).Uint()
 		b = strconv.AppendUint(b, val, 10)
 		field.SetUint(val)
 	case string:
 		b = append(b, []byte(val.(string))...)
 		field.SetString(val.(string))
-	case int32, int64, int16, int8:
+	case int32, int64, int16, int8, int:
 		val := reflect.ValueOf(val).Int()
 		b = strconv.AppendInt(b, val, 10)
 		field.SetInt(val)
@@ -216,13 +221,20 @@ func (self *CacheModule) Set(key string, val interface{}) (err error) {
 		field.SetBool(val.(bool))
 	case time.Time:
 		field.SetString(val.(time.Time).Format(time.RFC1123Z))
+	default:
+		Error.Println("undefined val type")
 	}
 	if self.cachekey == "" {
 		self.cachekey = self.GetCacheKey()
 	}
-	_, err = self.Cache.Hset(self.cachekey, key, b)
+	var over bool
+	Debug.Println(b)
+	over, err = self.Cache.Hset(self.cachekey, key, b)
 	if err != nil {
 		return
+	}
+	if over == false {
+		return errors.New(self.cachekey + " hset " + key + " error !")
 	}
 
 	//go self.Object.Change(key, val).Save()
