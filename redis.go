@@ -43,6 +43,7 @@ func goRedisRuntime() {
 			if !ok {
 				client = new(redis.Client)
 				client.Addr = addr
+				client.Db = cache_db
 				client.MaxPoolSize = 8
 				RedisServer[addr] = client
 			}

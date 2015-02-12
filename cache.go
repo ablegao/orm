@@ -15,6 +15,7 @@ import (
 var Debug = log.New(os.Stdout, "ORM-DEBUG", log.Lshortfile|log.LstdFlags)
 var Error = log.New(os.Stdout, "ORM-ERROR", log.Lshortfile|log.LstdFlags)
 var cache_prefix []byte = []byte("nado")
+var cache_db = 0
 var st []byte = []byte("*")
 
 var (
@@ -23,6 +24,10 @@ var (
 
 func SetCachePrefix(str string) {
 	cache_prefix = []byte(str)
+
+}
+func SetDefaultCacheDb(db int) {
+	cache_db = db
 }
 
 var debug_sql bool = false
@@ -180,6 +185,7 @@ func (self *CacheModule) Incrby(key string, val int64) (ret int64, err error) {
 		self.cachekey = self.GetCacheKey()
 	}
 	ret, err = self.Cache.Hincrby(self.cachekey, key, val)
+
 	if val >= 0 {
 		self.Object.Change(key+"__add", val)
 	} else if val < 0 {
@@ -208,6 +214,7 @@ func (self *CacheModule) Set(key string, val interface{}) (err error) {
 	case string:
 		b = append(b, []byte(val.(string))...)
 		field.SetString(val.(string))
+
 	case int32, int64, int16, int8, int:
 		val := reflect.ValueOf(val).Int()
 		b = strconv.AppendInt(b, val, 10)
@@ -220,15 +227,16 @@ func (self *CacheModule) Set(key string, val interface{}) (err error) {
 		b = strconv.AppendBool(b, val.(bool))
 		field.SetBool(val.(bool))
 	case time.Time:
-		field.SetString(val.(time.Time).Format(time.RFC1123Z))
+		field.Set(reflect.ValueOf(val))
+		b = append(b, []byte(val.(time.Time).Format(time.RFC1123Z))...)
 	default:
 		Error.Println("undefined val type")
 	}
 	if self.cachekey == "" {
 		self.cachekey = self.GetCacheKey()
 	}
+
 	var over bool
-	Debug.Println(b)
 	over, err = self.Cache.Hset(self.cachekey, key, b)
 	if err != nil {
 		return
@@ -236,7 +244,7 @@ func (self *CacheModule) Set(key string, val interface{}) (err error) {
 	if over == false {
 		return errors.New(self.cachekey + " hset " + key + " error !")
 	}
-
+	self.Object.Change(key, val)
 	//go self.Object.Change(key, val).Save()
 
 	return
@@ -304,6 +312,8 @@ func (self *CacheModule) All() ([]interface{}, error) {
 		//self.Object.All()
 		if rets, err := self.Object.All(); err == nil {
 			for _, item := range rets {
+
+				//Debug.Println(item)
 				self.saveToCache(item.(Module))
 			}
 			return rets, nil
@@ -515,6 +525,7 @@ func (self *CacheModule) key2Mode(key string) interface{} {
 func (self CacheModule) saveToCache(mode Module) error {
 	return CacheMode(mode).Ca(self.cache_address).SaveToCache()
 }
+
 func (self *CacheModule) SaveToCache() error {
 	key := self.GetCacheKey()
 	maping := map[string]interface{}{}

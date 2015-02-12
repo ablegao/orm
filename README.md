@@ -8,6 +8,13 @@
 go get github.com/ablegao/orm
 
 
+
+## Super database
+
+sqlite3 "github.com/mattn/go-sqlite3"
+mysql "github.com/go-sql-driver/mysql"
+postgree "github.com/lib/pq"
+
 ##数据库Model 建立方法
 
     //引用模块
@@ -19,11 +26,11 @@ go get github.com/ablegao/orm
     //建立连接 
     // 参数分别为 名称 ， 驱动， 连接字符串
     // 注：必须包含一个default 连接， 作为默认连接。
-    orm.NewDatabase("default" , "mysql" , "user:passwd@ip/database?charset=utf8")
+    orm.NewDatabase("default" , "mysql" , "user:passwd@ip/database?charset=utf8&parseTime=true")
 
 
     //建立一个数据模型。 
-	type UserInfo struct {
+	type UserInfo struct**** {
 		orm.Object
 		Id int64 `field:"id" auto:"true" index:"pk"`
 		Name string `field:"username"`
@@ -47,7 +54,7 @@ go get github.com/ablegao/orm
 	func main(){
 		orm.CacheConsistent.Add("127.0.0.1:6379")  //添加多个redis服务器
 		orm.SetCachePrefix("nado") //默认nado .  将作为redis key 的前缀
-		NewDatabase("default", "mysql", "happy:passwd@tcp(127.0.0.1:3306)/mydatabase?charset=utf8")
+		NewDatabase("default", "mysql", "happy:passwd@tcp(127.0.0.1:3306)/mydatabase?charset=utf8&parseTime=true")
 
 
 		b := new(userB)

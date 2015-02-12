@@ -272,16 +272,17 @@ func (self *Object) All() ([]interface{}, error) {
 		defer rows.Close()
 
 		ret := []interface{}{}
+		val := []interface{}{}
 
 		for rows.Next() {
 			m := reflect.New(reflect.TypeOf(self.mode).Elem()).Elem()
-
-			val := []interface{}{}
+			val = val[len(val):]
 			for i := 0; i < m.NumField(); i++ {
 				if name := m.Type().Field(i).Tag.Get("field"); len(name) > 0 {
 					val = append(val, m.Field(i).Addr().Interface())
 				}
 			}
+
 			rows.Scan(val...)
 			ret = append(ret, m.Addr().Interface())
 		}
