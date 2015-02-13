@@ -272,7 +272,8 @@ func (self *CacheModule) Limit(page, step int) *CacheModule {
 	return self
 }
 func (self *CacheModule) AllOnCache() ([]interface{}, error) {
-	if keys, err := self.Keys(self.getKey()); err == nil && len(keys) > 0 {
+	key := self.getKey()
+	if keys, err := self.Keys(key); err == nil && len(keys) > 0 {
 		//(keys)
 		sort.Sort(sort.StringSlice(keys))
 		if self.limit != NULL_LIMIT {
@@ -296,8 +297,8 @@ func (self *CacheModule) AllOnCache() ([]interface{}, error) {
 			for i, k := range keys {
 				vals[i] = self.key2Mode(k)
 			}
+			return vals, nil
 		}
-		return make([]interface{}, 0), nil
 	} else {
 		if err == nil {
 			return []interface{}{}, nil
@@ -309,6 +310,9 @@ func (self *CacheModule) All() ([]interface{}, error) {
 	if rets, err := self.AllOnCache(); err == nil && len(rets) > 0 {
 		return rets, err
 	} else {
+		if debug_sql {
+			Error.Println("all error:", err, len(rets))
+		}
 		//self.Object.All()
 		if rets, err := self.Object.All(); err == nil {
 			for _, item := range rets {
@@ -337,19 +341,21 @@ func (self *CacheModule) DeleteOnCache() error {
 func (self *CacheModule) OneOnCache() error {
 	key := self.getKey()
 	self.cachekey = key
-	if debug_sql {
-		Debug.Println("keys ", self.cachekey)
-	}
+
 	n, err := self.Exists(key)
 	if err != nil {
+		if debug_sql {
+			Debug.Println(err)
+		}
 		return err
+	}
+	if debug_sql {
+		Debug.Println("keys ", self.cachekey, " is exists ", n)
 	}
 	if n == false {
 		return ErrKeyNotExist
 	}
-	if debug_sql {
-		Debug.Println("keys exists", n)
-	}
+
 	self.where = self.where[len(self.where):]
 	val := reflect.ValueOf(self.mode).Elem()
 	typ := reflect.TypeOf(self.mode).Elem()
@@ -392,11 +398,13 @@ func (self *CacheModule) One() error {
 	if err := self.OneOnCache(); err != nil {
 		//return errors.New("keys " + key + " not exists!")
 		if debug_sql {
-			Debug.Println(err)
+			Debug.Println("keys ", self.cachekey, "error", err)
 		}
 		err = self.Object.One()
 		if err == nil {
 			defer self.SaveToCache()
+		} else {
+			Error.Println(err)
 		}
 		return err
 	}
