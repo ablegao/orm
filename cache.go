@@ -350,7 +350,7 @@ func (self *CacheModule) OneOnCache() error {
 		return err
 	}
 	if debug_sql {
-		Debug.Println("keys ", self.cachekey, " is exists ", n)
+		Debug.Println("key ", self.cachekey, " is exists ", n)
 	}
 	if n == false {
 		return ErrKeyNotExist
@@ -396,9 +396,9 @@ func (self *CacheModule) OneOnCache() error {
 func (self *CacheModule) One() error {
 
 	if err := self.OneOnCache(); err != nil {
-		//return errors.New("keys " + key + " not exists!")
+		//return errors.New("key " + key + " not exists!")
 		if debug_sql {
-			Debug.Println("keys ", self.cachekey, "error", err)
+			Debug.Println("key ", self.cachekey, "error", err)
 		}
 		err = self.Object.One()
 		if err == nil {
