@@ -1,11 +1,17 @@
 ##About 
 
+![server-nado](./logo.jpg)
+
 一个数据库ORM.
+
+Please go to  [http://github.com/server-nado/orm](http://github.com/server-nado/orm) !
+
+代码已经转移到  [http://github.com/server-nado/orm](http://github.com/server-nado/orm) !
 
 ## How to use?
 
 ### Insert 
-go get github.com/ablegao/orm
+go get github.com/server-nado/orm
 
 
 
